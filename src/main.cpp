@@ -12,6 +12,8 @@
 int steps_per_rev = 200; // 360/1.8
 unsigned long prev_millis = 0;
 
+int debugCounter = 0;
+
 void panic();
 bool off(void*);
 bool toolhead_in_place();
@@ -213,7 +215,7 @@ void setup() {
 
   scheduler.push(wake_stepper, &stepperYState); // wake stepper so it can be used
 
-  StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
+  // StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
   scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, LOW); return true;}, nullptr);
   scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2}); // move stepper until toolhead is detected by switch
   scheduler.push(handleStepper, &stepperYState);
@@ -224,13 +226,25 @@ void setup() {
   scheduler.push(resetDelay, &delayState1); // resets the timer for the delay handler
   scheduler.push(handleDelay, &delayState1);
 
-  // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
-  // scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, STEPS, new int(steps_per_rev*5), 2}); // move stepper for 5 revolutions worth of steps
-  // scheduler.push(handleStepper, &stepperYState);
+  scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
+  scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, TIME, new unsigned long(5000), 2}); // move stepper for 5 seconds
+  scheduler.push(handleStepper, &stepperYState);
 
-  // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
-  // scheduler.push(resetStepper, &stepperYState); // reset steps taken for next run
-  // scheduler.push(handleStepper, &stepperYState); //interval and distance same so just no need to redo
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    DelayState* state = (DelayState*)context;
+    state->duration = 1000;
+    return true;
+  }, &delayState1);
+  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+
+  scheduler.push([](void*) {analogWrite(SERVO, 90); return true;}, nullptr); // activate tool using servo (move to down position)
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    DelayState* state = (DelayState*)context;
+    state->duration = 10000;
+    return true;
+  }, &delayState1);
+  scheduler.push(handleDelay, &delayState1); // delay for 10 seconds with updated duration
 
   scheduler.push(off, nullptr);
 }
@@ -259,6 +273,12 @@ void loop() {
     off(nullptr); // ensure everything is turned off at the end
     while (true) {} // Stop further processing
   };
+
+  if (debugCounter % 1000 == 0) { // print debug info every 100 loops
+    Serial.println(analogRead(THERMISTOR));
+  }
+
+  debugCounter++;
 }
 
 void panic() {
@@ -329,6 +349,7 @@ bool setupStepper(void* context) {
   
   if (stopCondition == TIME) {
     state->stopCondition = TIME;
+    state->startTime = millis();
     state->duration = *((unsigned long*)stopConditionValue);
   } else if (stopCondition == STEPS) {
     state->stopCondition = STEPS;
