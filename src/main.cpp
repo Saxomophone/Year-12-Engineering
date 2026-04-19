@@ -15,13 +15,13 @@ unsigned long prev_millis = 0;
 void panic();
 bool off(void*);
 bool toolhead_in_place();
-void sleep_stepper();
-bool wake_stepper(void*);
+bool sleep_stepper(void* context);
+bool wake_stepper(void* context);
 bool handleDelay(void* context);
 bool handleStepper(void* context);
 bool resetDelay(void* context);
-bool resetStepper(void* context);
-void activateTrigger(void* context);
+bool driver_overheated();
+bool setupStepper(void* context);
 
 // Define a type for a function taking no args and returning void
 typedef bool (*EventHandler)(void *context);
@@ -62,7 +62,7 @@ class EventScheduler {
 
     void processNext() {
       callListeners(); // Check listeners before processing the next event
-      
+
       if (eventCount > 0) {
         bool isFinished = handlers[0](contexts[0]); // Call the first event handler with its context
 
@@ -108,6 +108,7 @@ class EventScheduler {
       } else {
         Serial.println("Listener limit reached");
       }
+      return -1; // indicates failure to add listener
     }
 
     void removeListener(int id) {
@@ -133,12 +134,6 @@ class EventScheduler {
           if (currentConditionState != listener->lastConditionState) {
             *(listener->targetFlag) = currentConditionState; // update target flag to new state
             listener->lastConditionState = currentConditionState; // update last condition state
-
-            // Optional: Print state change for debugging
-            Serial.print("Listener ");
-            Serial.print(listener->id);
-            Serial.print(": ");
-            Serial.println(listener->targetFlag ? "True" : "False");
           }
         }
       }
@@ -167,7 +162,14 @@ struct StepperState {
   int stepsTaken = 0; // for STEPS condition
   int targetSteps; // for STEPS condition
 
-  bool triggerMet = false; // for TRIGGER condition
+  bool* trigger; // for TRIGGER condition (set up such that the stepper will run until the trigger becomes true)
+};
+
+struct StepperResetPackage {
+  StepperState* state;
+  StepperStopCondition stopCondition;
+  void* stopConditionValue;
+  unsigned int interval;
 };
 
 
@@ -191,80 +193,92 @@ void setup() {
   Serial.begin(9600);
 
   // init
-  sleep_stepper();
   analogWrite(SERVO, 210); // ensures servo is in open position
   digitalWrite(ELECTROMAGNET, LOW);
   digitalWrite(GREEN_LED, HIGH);
+  scheduler.initListeners();
 
+  // add listeners
+  Listener toolheadAttachedListener;
+  scheduler.addListener(&toolheadAttached, toolhead_in_place, &toolheadAttachedListener);
+
+  Listener stepperOverheatListener;
+  scheduler.addListener(&stepperOverheated, driver_overheated, &stepperOverheatListener);
+
+  // schedule events for testing 
   // define stepper states
   stepperYState.pin = STEPPER_Y_STEP;
   stepperYState.pinState = PIN_LOW;
 
 
-  // initialise stepper motor
-  scheduler.push(wake_stepper, nullptr);
+  scheduler.push(wake_stepper, &stepperYState); // wake stepper so it can be used
+
+  StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
   scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, LOW); return true;}, nullptr);
-
-  stepperYState.stopCondition = STEPS;
-  stepperYState.interval = 2; // 2ms between steps
-  stepperYState.targetSteps = steps_per_rev*10; // 5 revolutions
+  scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2}); // move stepper until toolhead is detected by switch
   scheduler.push(handleStepper, &stepperYState);
-
   
-  DelayState delayState1 = { 0, 5000 }; // 2 second delay
+  scheduler.push([](void*) {digitalWrite(ELECTROMAGNET, HIGH); return true;}, nullptr); // turn on electromagnet to grab toolhead
+
+  DelayState delayState1 = { 0, 500 }; // 500ms delay
   scheduler.push(resetDelay, &delayState1); // resets the timer for the delay handler
   scheduler.push(handleDelay, &delayState1);
 
-  scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
-  scheduler.push(resetStepper, &stepperYState); // reset steps taken for next run
-  scheduler.push(handleStepper, &stepperYState); //interval and distance same so just no need to redo
+  // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
+  // scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, STEPS, new int(steps_per_rev*5), 2}); // move stepper for 5 revolutions worth of steps
+  // scheduler.push(handleStepper, &stepperYState);
+
+  // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
+  // scheduler.push(resetStepper, &stepperYState); // reset steps taken for next run
+  // scheduler.push(handleStepper, &stepperYState); //interval and distance same so just no need to redo
 
   scheduler.push(off, nullptr);
 }
 
 
 void loop() {
-  // int thermistor_read = analogRead(THERMISTOR);
-  // Serial.println(thermistor_read);
-  // delay(500);
-
-  // digitalWrite(ELECTROMAGNET, HIGH);
-  // delay(5000);
-  // digitalWrite(ELECTROMAGNET, LOW);
-  // delay(5000);
 
   // analogWrite(SERVO, 90);
   // delay(500);
   // analogWrite(SERVO, 210);
   // delay(500);
 
-  // wake_stepper();
-
-  // Serial.println(toolhead_is_attached());
-  // delay(500);
-  // pulse_electromagnet();
-  // delay(5000);
-
-
 
   scheduler.processNext(); // Call this repeatedly in the loop to process events
+  // Serial.println("StepperOverheated: " + String(stepperOverheated ? "True" : "False"));
+  // Serial.println("Stepper Heat: " + String(analogRead(THERMISTOR)));
+  // Serial.println("ToolheadAttached: " + String(toolheadAttached ? "True" : "False"));
+  
+  if (stepperOverheated) {
+    Serial.println("Stepper overheated! Current thermistor reading: " + String(analogRead(THERMISTOR)));
+    panic();
+  }
+
   if (scheduler.isEmpty()) {
     Serial.println("All events completed");
+    off(nullptr); // ensure everything is turned off at the end
     while (true) {} // Stop further processing
   };
 }
 
 void panic() {
-  digitalWrite(ELECTROMAGNET, LOW);
-  digitalWrite(GREEN_LED, HIGH);
+  if (!toolheadAttached) {
+    digitalWrite(ELECTROMAGNET, LOW);
+  }
   Serial.println("panic");
-  while (true) {} // halts program
+  sleep_stepper(&stepperYState);  
+  while (true) {
+      digitalWrite(GREEN_LED, HIGH);
+      delay(500);
+      digitalWrite(GREEN_LED, LOW);
+      delay(500);
+  } // halts program
 }
 
 bool off(void*) {
   digitalWrite(ELECTROMAGNET, LOW);
   digitalWrite(GREEN_LED, LOW);
-  sleep_stepper();
+  sleep_stepper(&stepperYState);
   return true;
 }
 
@@ -272,16 +286,17 @@ bool toolhead_in_place() {
   return digitalRead(TOOLHEAD_SWITCH) == LOW;
 }
 
-bool overheated() {
+bool driver_overheated() {
   int thermistor_read = analogRead(THERMISTOR);
-  return thermistor_read > 600;
+  return thermistor_read > 590;
 }
 
-void sleep_stepper() {
+bool sleep_stepper(void* context) {
   digitalWrite(STEPPER_Y_SLEEP, LOW); // sleep pin is active low
+  return true;
 }
 
-bool wake_stepper(void*) {
+bool wake_stepper(void* context) {
   digitalWrite(STEPPER_Y_SLEEP, HIGH); // sleep pin is active low
   delay(1); // I don't like using a blocking function but I need to block the stepper and its only a short delay called right at the start. I also don't want to bother cause it really doesn't matter.
   return true;
@@ -304,13 +319,33 @@ bool resetDelay(void* context) {
   return true; // This handler just resets the timer and is done immediately
 }
 
-bool resetStepper(void* context) {
-  StepperState* state = (StepperState*)context;
-  state->stepsTaken = 0;
+bool setupStepper(void* context) {
+  StepperResetPackage* update = (StepperResetPackage*)context;
+  StepperState* state = update->state;
+
+  StepperStopCondition stopCondition = update->stopCondition;
+  void* stopConditionValue = update->stopConditionValue;
+
+  
+  if (stopCondition == TIME) {
+    state->stopCondition = TIME;
+    state->duration = *((unsigned long*)stopConditionValue);
+  } else if (stopCondition == STEPS) {
+    state->stopCondition = STEPS;
+    state->targetSteps = *((int*)stopConditionValue);
+  } else if (stopCondition == TRIGGER) {
+    state->stopCondition = TRIGGER;
+    state->trigger = (bool*)stopConditionValue;
+  } else {
+    Serial.println("Invalid stop condition");
+    return false;
+  }
+
+  state->interval = update->interval;
   state->lastToggleTime = millis();
-  state->triggerMet = false;
   digitalWrite(state->pin, LOW); // ensure pin starts low
   state->pinState = PIN_LOW;
+
   return true;
 }
 
@@ -345,15 +380,10 @@ bool handleStepper(void* context) {
       break;
 
     case TRIGGER:
-      return state->triggerMet; // if true the trigger is met and the function returns with as completed otherwise false and it continues
+      return *(state->trigger); // Done when trigger becomes true
   }
 
   return false; // Keep waiting
-}
-
-void activateTrigger(void* context) {
-  StepperState* state = (StepperState*)context;
-  state->triggerMet = true;
 }
 
 //function for demonstration
