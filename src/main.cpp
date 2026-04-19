@@ -28,10 +28,13 @@ typedef bool (*EventHandler)(void *context);
 
 // Having id not be part of context means that the context does not need to be unpacked to access the id. 
 // The id will be accessed a lot so this is good for both speed and readability.
-typedef void (*Listener)(void *context);
+typedef bool (*ListenerFunction)();
 
-struct ListenerState {
+struct Listener {
   int id;
+  bool* targetFlag; // pointer the global flag which the listener will toggle
+  ListenerFunction listenerFunction; // function pointer to the condition check function which will determine whether the listener should toggle the flag
+  bool lastConditionState; // stores the last state of the condition to detect changes
 };
 
 class EventScheduler {
@@ -43,8 +46,7 @@ class EventScheduler {
     void* contexts[MAX_EVENTS]; // Array to hold contexts for each event
     int eventCount = 0; // Number of scheduled events
 
-    Listener listeners[MAX_LISTENERS]; // Array to hold listeners
-    void* listenerContexts[MAX_LISTENERS]; // Array to hold contexts for listeners
+    void* listeners[MAX_LISTENERS]; // Array to hold contexts for listeners
     int listenerCount = 0; // Number of registered listeners
 
   public:
@@ -59,6 +61,8 @@ class EventScheduler {
     }
 
     void processNext() {
+      callListeners(); // Check listeners before processing the next event
+      
       if (eventCount > 0) {
         bool isFinished = handlers[0](contexts[0]); // Call the first event handler with its context
 
@@ -80,20 +84,25 @@ class EventScheduler {
     void initListeners() { 
       for (int i = 0; i < MAX_LISTENERS; i++) {
         listeners[i] = nullptr;
-        listenerContexts[i] = new ListenerState;
       }
     }
 
-    void addListener(Listener listener, void* context) {
+    int addListener(bool* targetFlag, ListenerFunction listenerFunction, Listener* listener) {
       if (listenerCount < MAX_LISTENERS) {
-        ListenerState* newState = (ListenerState*)context;
-
         for (int i = 0; i < MAX_LISTENERS; i++) {
           if (listeners[i] == nullptr) {
-            newState->id = i; // assign id to context
+
+            // setup listener by assigning values to state struct
+            listener->id = i; // assign id to state
+            listener->listenerFunction = listenerFunction; 
+            *targetFlag = listenerFunction();
+            listener->targetFlag = targetFlag;
+            listener->lastConditionState = targetFlag;
+
+            // add listener to array
             listeners[i] = listener;
-            listenerContexts[i] = context;
             listenerCount++;
+            return i; // return id of listener for reference
           }
         }
       } else {
@@ -103,8 +112,8 @@ class EventScheduler {
 
     void removeListener(int id) {
       for (int i = 0; i < MAX_LISTENERS; i++) {
-        ListenerState* state = (ListenerState*)listenerContexts[i];
-        if (state->id == id) {
+        Listener* listener = (Listener*)listeners[i];
+        if (listener->id == id) {
           listeners[i] = nullptr;
           listenerCount--;
           break;
@@ -115,7 +124,22 @@ class EventScheduler {
     void callListeners() {
       for (int i = 0; i < MAX_LISTENERS; i++) {
         if (listeners[i] != nullptr) {
-          listeners[i](listenerContexts[i]);
+          Listener* listener = (Listener*)listeners[i];
+
+          // define currentConditionState here for readability and so that the listener function is only called once
+          bool currentConditionState = listener->listenerFunction();
+
+          // only update if condition has changed (prevents unecessary writes)
+          if (currentConditionState != listener->lastConditionState) {
+            *(listener->targetFlag) = currentConditionState; // update target flag to new state
+            listener->lastConditionState = currentConditionState; // update last condition state
+
+            // Optional: Print state change for debugging
+            Serial.print("Listener ");
+            Serial.print(listener->id);
+            Serial.print(": ");
+            Serial.println(listener->targetFlag ? "True" : "False");
+          }
         }
       }
     }
@@ -149,6 +173,9 @@ struct StepperState {
 
 EventScheduler scheduler;
 StepperState stepperYState;
+bool stepperOverheated = false;
+bool toolheadAttached = false;
+bool areaObstructed = false;
 
 void setup() {
   // setup pins
@@ -241,11 +268,11 @@ bool off(void*) {
   return true;
 }
 
-bool toolhead_in_place(void* context) {
+bool toolhead_in_place() {
   return digitalRead(TOOLHEAD_SWITCH) == LOW;
 }
 
-bool overheated_test() {
+bool overheated() {
   int thermistor_read = analogRead(THERMISTOR);
   return thermistor_read > 600;
 }
