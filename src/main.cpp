@@ -8,11 +8,20 @@
 #define STEPPER_Y_STEP 3
 #define STEPPER_Y_SLEEP 4
 #define TOOLHEAD_SWITCH A5
+#define TRIGGER_PIN A1
+#define ECHO_PIN A2
+#define ULTRASONIC_TIMEOUT 1000
+// signal travels 0.33mm/us, so this gives max distance of 330mm when multiplied by 2 cause return trip which is about right and is a nice round number :3
+
+bool ultrasonicReadings[50]; // array to hold recent ultrasonic readings for smoothing
 
 int steps_per_rev = 200; // 360/1.8
 unsigned long prev_millis = 0;
 
-int debugCounter = 0;
+unsigned long prevUltrasonic_ms = 0;
+
+
+int loopCounter = 0;
 
 void panic();
 bool off(void*);
@@ -24,6 +33,7 @@ bool handleStepper(void* context);
 bool resetDelay(void* context);
 bool driver_overheated();
 bool setupStepper(void* context);
+bool area_obstructed();
 
 // Define a type for a function taking no args and returning void
 typedef bool (*EventHandler)(void *context);
@@ -191,6 +201,8 @@ void setup() {
   pinMode(STEPPER_Y_STEP, OUTPUT);
   pinMode(STEPPER_Y_SLEEP, OUTPUT);
   pinMode(TOOLHEAD_SWITCH, INPUT_PULLUP);
+  pinMode(TRIGGER_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
 
   Serial.begin(9600);
 
@@ -206,6 +218,9 @@ void setup() {
 
   Listener stepperOverheatListener;
   scheduler.addListener(&stepperOverheated, driver_overheated, &stepperOverheatListener);
+
+  Listener areaObstructionListener;
+  scheduler.addListener(&areaObstructed, area_obstructed, &areaObstructionListener);
 
   // schedule events for testing 
   // define stepper states
@@ -267,6 +282,11 @@ void loop() {
     Serial.println("Stepper overheated! Current thermistor reading: " + String(analogRead(THERMISTOR)));
     panic();
   }
+  
+  if (areaObstructed) {
+    Serial.println("Area obstructed!");
+    panic();
+  }
 
   if (scheduler.isEmpty()) {
     Serial.println("All events completed");
@@ -274,11 +294,7 @@ void loop() {
     while (true) {} // Stop further processing
   };
 
-  if (debugCounter % 1000 == 0) { // print debug info every 100 loops
-    Serial.println(analogRead(THERMISTOR));
-  }
-
-  debugCounter++;
+  loopCounter++;
 }
 
 void panic() {
@@ -311,6 +327,56 @@ bool driver_overheated() {
   return thermistor_read > 590;
 }
 
+bool area_obstructed() {
+  if (millis() - prevUltrasonic_ms <= 1000) {
+    // Serial.println("Ultrasonic reading did not occur");
+    return false;
+  }
+  // Serial.println("Checking area obstruction with ultrasonic sensor...");
+
+  for (int i = 0; i <= 50; i++) {
+      
+    if (i == 50) {
+      // Serial.println("checking time");
+      int trueCount = 0;
+      for (int j = 0; j < 50; j++) {
+        if (ultrasonicReadings[j]) { // if any reading detects an object, consider the area obstructed
+          trueCount++;
+        }
+      }
+      if (trueCount > 48) {
+        Serial.println("Area obstructed! Ultrasonic readings: " + String(trueCount));
+        prevUltrasonic_ms = millis();
+        return true;
+      } else {
+        // Serial.println("Area clear. Ultrasonic readings: " + String(trueCount));
+        prevUltrasonic_ms = millis();
+        return false;
+      }
+    }
+    
+    // send ultrasonic pulse
+    digitalWrite(TRIGGER_PIN, LOW);
+    delayMicroseconds(5);
+    digitalWrite(TRIGGER_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIGGER_PIN, LOW);
+    
+    long duration_us = pulseIn(ECHO_PIN, HIGH, ULTRASONIC_TIMEOUT); // wait for echo or timeout
+
+    ultrasonicReadings[i] = false; // no object detected
+    double distance_cm = duration_us * 0.034 / 2;
+    // Serial.println("Ultrasonic reading: " + String(distance_cm) + " cm, duration: " + String(duration_us) + " us");
+    if (duration_us > 0 && distance_cm < 30) { // if we got a valid reading and it's less than 30cm, consider it an obstruction
+      ultrasonicReadings[i] = true;
+    } else {
+      ultrasonicReadings[i] = false;
+    }
+  }
+  prevUltrasonic_ms = millis();
+  return false; // if we got here then the threshold was not met to consider there to be an obstruction
+}
+
 bool sleep_stepper(void* context) {
   digitalWrite(STEPPER_Y_SLEEP, LOW); // sleep pin is active low
   return true;
@@ -325,7 +391,7 @@ bool wake_stepper(void* context) {
 // Handler for Delay
 bool handleDelay(void* context) {
   DelayState* state = (DelayState*)context; // state is the context given cast to a DelayState struct
-  Serial.println(millis() - state->startTime);
+  // Serial.println(millis() - state->startTime);
   
   if (millis() - state->startTime >= state->duration) {
     return true; // Done
