@@ -1,7 +1,6 @@
 #include "Arduino.h"
 #include "eventScheduler.hpp"
 
-
 void EventScheduler::push(EventHandler event, void* context) {
   if (eventCount < MAX_EVENTS) {
     handlers[eventCount] = event;

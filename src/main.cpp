@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include "eventScheduler.hpp"
-#include "listener.hpp"
-#include "stepperEvents.hpp"
+#include "listeners/listener.hpp"
+#include "events/stepperEvents.hpp"
 #include "pin.hpp"
+#include "events/motionEvents.hpp"
 
 // #define THERMISTOR A0
 // #define ELECTROMAGNET A4
@@ -105,6 +106,11 @@ void setup() {
     return true;
   }, &stepperY);
 
+  scheduler.push([](void* context) {
+    StepperState* stepper = (StepperState*)context;
+    return stepper->handleStepper();
+  }, &stepperY);
+
   // // StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
   // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, LOW); return true;}, nullptr);
   // scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2}); // move stepper until toolhead is detected by switch
@@ -193,60 +199,60 @@ bool off(void*) {
   return true;
 }
 
-bool driver_overheated() {
-  // int thermistor_read = analogRead(THERMISTOR);
-  // return thermistor_read > 590;
-}
+// bool driver_overheated() {
+//   int thermistor_read = analogRead(THERMISTOR);
+//   return thermistor_read > 590;
+// }
 
-bool area_obstructed() {
-  // if (millis() - prevUltrasonic_ms <= 1000) {
-  //   // Serial.println("Ultrasonic reading did not occur");
-  //   return false;
-  // }
-  // // Serial.println("Checking area obstruction with ultrasonic sensor...");
+// bool area_obstructed() {
+//   if (millis() - prevUltrasonic_ms <= 1000) {
+//     // Serial.println("Ultrasonic reading did not occur");
+//     return false;
+//   }
+//   // Serial.println("Checking area obstruction with ultrasonic sensor...");
 
-  // for (int i = 0; i <= 50; i++) {
+//   for (int i = 0; i <= 50; i++) {
       
-  //   if (i == 50) {
-  //     // Serial.println("checking time");
-  //     int trueCount = 0;
-  //     for (int j = 0; j < 50; j++) {
-  //       if (ultrasonicReadings[j]) { // if any reading detects an object, consider the area obstructed
-  //         trueCount++;
-  //       }
-  //     }
-  //     if (trueCount > 48) {
-  //       Serial.println("Area obstructed! Ultrasonic readings: " + String(trueCount));
-  //       prevUltrasonic_ms = millis();
-  //       return true;
-  //     } else {
-  //       // Serial.println("Area clear. Ultrasonic readings: " + String(trueCount));
-  //       prevUltrasonic_ms = millis();
-  //       return false;
-  //     }
-  //   }
+//     if (i == 50) {
+//       // Serial.println("checking time");
+//       int trueCount = 0;
+//       for (int j = 0; j < 50; j++) {
+//         if (ultrasonicReadings[j]) { // if any reading detects an object, consider the area obstructed
+//           trueCount++;
+//         }
+//       }
+//       if (trueCount > 48) {
+//         Serial.println("Area obstructed! Ultrasonic readings: " + String(trueCount));
+//         prevUltrasonic_ms = millis();
+//         return true;
+//       } else {
+//         // Serial.println("Area clear. Ultrasonic readings: " + String(trueCount));
+//         prevUltrasonic_ms = millis();
+//         return false;
+//       }
+//     }
     
-  //   // send ultrasonic pulse
-  //   digitalWrite(TRIGGER_PIN, LOW);
-  //   delayMicroseconds(5);
-  //   digitalWrite(TRIGGER_PIN, HIGH);
-  //   delayMicroseconds(10);
-  //   digitalWrite(TRIGGER_PIN, LOW);
+//     // send ultrasonic pulse
+//     digitalWrite(TRIGGER_PIN, LOW);
+//     delayMicroseconds(5);
+//     digitalWrite(TRIGGER_PIN, HIGH);
+//     delayMicroseconds(10);
+//     digitalWrite(TRIGGER_PIN, LOW);
     
-  //   long duration_us = pulseIn(ECHO_PIN, HIGH, ULTRASONIC_TIMEOUT); // wait for echo or timeout
+//     long duration_us = pulseIn(ECHO_PIN, HIGH, ULTRASONIC_TIMEOUT); // wait for echo or timeout
 
-  //   ultrasonicReadings[i] = false; // no object detected
-  //   double distance_cm = duration_us * 0.034 / 2;
-  //   // Serial.println("Ultrasonic reading: " + String(distance_cm) + " cm, duration: " + String(duration_us) + " us");
-  //   if (duration_us > 0 && distance_cm < 30) { // if we got a valid reading and it's less than 30cm, consider it an obstruction
-  //     ultrasonicReadings[i] = true;
-  //   } else {
-  //     ultrasonicReadings[i] = false;
-  //   }
-  // }
-  // prevUltrasonic_ms = millis();
-  // return false; // if we got here then the threshold was not met to consider there to be an obstruction
-}
+//     ultrasonicReadings[i] = false; // no object detected
+//     double distance_cm = duration_us * 0.034 / 2;
+//     // Serial.println("Ultrasonic reading: " + String(distance_cm) + " cm, duration: " + String(duration_us) + " us");
+//     if (duration_us > 0 && distance_cm < 30) { // if we got a valid reading and it's less than 30cm, consider it an obstruction
+//       ultrasonicReadings[i] = true;
+//     } else {
+//       ultrasonicReadings[i] = false;
+//     }
+//   }
+//   prevUltrasonic_ms = millis();
+//   return false; // if we got here then the threshold was not met to consider there to be an obstruction
+// }
 
 // Handler for Delay
 bool handleDelay(void* context) {

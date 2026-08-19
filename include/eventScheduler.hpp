@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Arduino.h"
-#include "stepperEvents.hpp"
-#include "listener.hpp"
+#include "events/stepperEvents.hpp"
+#include "listeners/listener.hpp"
 
 
 class EventScheduler {

@@ -4,10 +4,6 @@
 #include "pin.hpp"
 #include "Arduino.h"
 
-
-
-
-
 enum StepperStopCondition { TIME, STEPS, TRIGGER };
 
 
