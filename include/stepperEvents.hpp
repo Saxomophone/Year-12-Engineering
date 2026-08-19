@@ -26,6 +26,9 @@ class StepperState {
     unsigned long lastToggleTime;
     unsigned int interval; // ms between toggles
 
+    int sleepPin;
+    int directionPin;
+
     // stop condition
     StepperStopCondition stopCondition;
 
@@ -39,9 +42,38 @@ class StepperState {
     bool* trigger; // for TRIGGER condition (set up such that the stepper will run until the trigger becomes true)
 
   public:
-    void init(int pin);
 
-    bool setupStepperEvent(StepperState newState);
+    StepperState(int stepPin, int sleepPin, int directionPin, unsigned int interval = 2, StepperStopCondition stopCondition = STEPS, void* stopValue = nullptr) {
+        this->stepPin = stepPin;
+        this->sleepPin = sleepPin;
+        this->directionPin = directionPin;
+        pinMode(stepPin, OUTPUT);
+        pinMode(sleepPin, OUTPUT);
+        pinMode(directionPin, OUTPUT);
+
+        this->interval = interval;
+        this->stepsTaken = 0;
+        this->stopCondition = stopCondition;
+
+        switch (stopCondition) {
+            case TIME: {
+                unsigned long* duration = (unsigned long*)stopValue;
+                this->duration = *duration;
+                break;
+            }
+            case STEPS: {
+                int* targetSteps = (int*)stopValue;
+                this->targetSteps = *targetSteps;
+                break;
+            }
+            case TRIGGER: {
+                this->trigger = trigger;
+                break;
+            }
+        }  
+    }
+
+    bool setupStepperEvent(void* context);
 
     bool handleStepper();
 

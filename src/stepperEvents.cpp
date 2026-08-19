@@ -22,31 +22,30 @@
 // gcode cheatsheet at https://machiningconceptserie.com/g-code-cheat-sheet/
 // output: array of instructions: [START, G0 x y, G1 x y, ... END
 
-bool StepperState::setupStepperEvent(StepperState newState) {
+bool StepperState::setupStepperEvent(void* context) {
+  StepperState* newState = (StepperState*)context;
   
-  if (newState.stopCondition == TIME) {
+  if (newState->stopCondition == TIME) {
     stopCondition = TIME;
-    startTime = millis();
-    duration = newState.duration;
-  } else if (newState.stopCondition == STEPS) {
+    duration = *((unsigned long*)newState->duration);
+  } else if (newState->stopCondition == STEPS) {
     stopCondition = STEPS;
-    targetSteps = newState.targetSteps;
-  } else if (newState.stopCondition == TRIGGER) {
+    targetSteps = *((int*)newState->targetSteps);
+  } else if (newState->stopCondition == TRIGGER) {
     stopCondition = TRIGGER;
-    trigger = newState.trigger;
+    trigger = newState->trigger;
   } else {
     Serial.println("Invalid stop condition");
     return false;
   }
 
-  interval = newState.interval;
+  interval = newState->interval;
   lastToggleTime = millis();
   digitalWrite(stepPin, LOW); // ensure pin starts low
   pinState = PIN_LOW;
 
   return true;
 }
-
 
 bool StepperState::handleStepper() {
   unsigned long currentTime = millis();
@@ -95,8 +94,4 @@ bool StepperState::wakeStepper() {
   digitalWrite(stepPin, HIGH); // sleep pin is active low
   delay(1); // I don't like using a blocking function but I need to block the stepper and its only a short delay called right at the start. I also don't want to bother cause it really doesn't matter.
   return true;
-}
-
-void StepperState::init(int pin) {
-  stepPin = pin;
 }

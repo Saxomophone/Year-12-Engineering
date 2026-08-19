@@ -59,6 +59,9 @@ bool toolheadAttached = false;
 bool areaObstructed = false;
 
 void setup() {
+
+  StepperState stepperY{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 2, STEPS, (void*)100};
+
   // setup pins
   // pinMode(THERMISTOR, INPUT);
   // pinMode(ELECTROMAGNET, OUTPUT);
@@ -87,7 +90,20 @@ void setup() {
   // scheduler.addListener(&areaObstructed, area_obstructed, &areaObstructionListener);
 
   // // schedule events for testing 
-  // scheduler.push(wake_stepper, &stepperYState); // wake stepper so it can be used
+
+
+  
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    StepperState* stepper = (StepperState*)context;
+    stepper->wakeStepper();
+    return true;
+  }, &stepperY); 
+
+  scheduler.push([](void* context) {
+    StepperState* stepper = (StepperState*)context;
+    stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 2, STEPS, (void*)100});
+    return true;
+  }, &stepperY);
 
   // // StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
   // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, LOW); return true;}, nullptr);

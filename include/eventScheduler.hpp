@@ -5,15 +5,10 @@
 #include "listener.hpp"
 
 
-
-
-// Define a type for a function taking no args and returning void
-typedef bool (*EventHandler)(void *context);
-
-
-
 class EventScheduler {
   private:
+    typedef bool (*EventHandler)(void *context);
+    
     static const int MAX_EVENTS = 20;
     static const int MAX_LISTENERS = 5;
 
