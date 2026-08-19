@@ -9,6 +9,7 @@ void EventScheduler::push(EventHandler event, void* context) {
   } else {
     Serial.println("Event queue full");
   }
+  Serial.println("Event pushed. Current event count: " + String(eventCount));
 }
 
 void EventScheduler::processNext() {
@@ -18,6 +19,7 @@ void EventScheduler::processNext() {
     bool isFinished = handlers[0](contexts[0]); // Call the first event handler with its context
 
     if (isFinished) { // If the event signals it's finished, remove it from the queue
+      Serial.println("Event finished. Removing from queue.");
 
       // Shift remaining events forward
       for (int i = 1; i < eventCount; i++) {

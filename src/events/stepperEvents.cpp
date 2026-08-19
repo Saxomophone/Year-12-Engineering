@@ -27,10 +27,10 @@ bool StepperState::setupStepperEvent(void* context) {
   
   if (newState->stopCondition == TIME) {
     stopCondition = TIME;
-    duration = *((unsigned long*)newState->duration);
+    duration = newState->duration;
   } else if (newState->stopCondition == STEPS) {
     stopCondition = STEPS;
-    targetSteps = *((int*)newState->targetSteps);
+    targetSteps = newState->targetSteps;
   } else if (newState->stopCondition == TRIGGER) {
     stopCondition = TRIGGER;
     trigger = newState->trigger;
@@ -43,6 +43,11 @@ bool StepperState::setupStepperEvent(void* context) {
   lastToggleTime = millis();
   digitalWrite(stepPin, LOW); // ensure pin starts low
   pinState = PIN_LOW;
+
+  directionPin = newState->directionPin;
+  stepsTaken = 0;
+
+
 
   return true;
 }
@@ -85,13 +90,13 @@ bool StepperState::handleStepper() {
 
 
 bool StepperState::sleepStepper() {
-  digitalWrite(stepPin, LOW); // sleep pin is active low
+  digitalWrite(sleepPin, LOW); // sleep pin is active low
   return true;
 }
 
 
 bool StepperState::wakeStepper() {
-  digitalWrite(stepPin, HIGH); // sleep pin is active low
+  digitalWrite(sleepPin, HIGH); // sleep pin is active low
   delay(1); // I don't like using a blocking function but I need to block the stepper and its only a short delay called right at the start. I also don't want to bother cause it really doesn't matter.
   return true;
 }

@@ -59,10 +59,10 @@ bool stepperOverheated = false;
 bool toolheadAttached = false;
 bool areaObstructed = false;
 
+StepperState stepperY{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 0, 0, nullptr};
+
+
 void setup() {
-
-  StepperState stepperY{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 2, STEPS, (void*)100};
-
   // setup pins
   // pinMode(THERMISTOR, INPUT);
   // pinMode(ELECTROMAGNET, OUTPUT);
@@ -80,6 +80,9 @@ void setup() {
   // digitalWrite(GREEN_LED, HIGH);
   scheduler.initListeners();
 
+  Serial.println("Starting setup...");
+
+
   // add listeners
   // Listener toolheadAttachedListener;
   // scheduler.addListener(&toolheadAttached, toolhead_in_place, &toolheadAttachedListener);
@@ -92,6 +95,7 @@ void setup() {
 
   // // schedule events for testing 
 
+  stepperY.sleepStepper(); // ensure stepper is asleep at start
 
   
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
@@ -102,7 +106,7 @@ void setup() {
 
   scheduler.push([](void* context) {
     StepperState* stepper = (StepperState*)context;
-    stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 2, STEPS, (void*)100});
+    stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 200, 0, nullptr});
     return true;
   }, &stepperY);
 
@@ -110,6 +114,19 @@ void setup() {
     StepperState* stepper = (StepperState*)context;
     return stepper->handleStepper();
   }, &stepperY);
+
+  scheduler.push([](void* context) {
+    StepperState* stepper = (StepperState*)context;
+    stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 1, 2, STEPS, 500, 0, nullptr});
+    return true;
+  }, &stepperY);
+
+  scheduler.push([](void* context) {
+    StepperState* stepper = (StepperState*)context;
+    return stepper->handleStepper();
+  }, &stepperY);
+
+  
 
   // // StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
   // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, LOW); return true;}, nullptr);
@@ -147,7 +164,6 @@ void setup() {
 
 
 void loop() {
-
   // analogWrite(SERVO, 90);
   // delay(500);
   // analogWrite(SERVO, 210);
@@ -192,10 +208,10 @@ void panic() {
   // } // halts program
 }
 
-bool off(void*) {
+bool off(void* context) {
   // digitalWrite(ELECTROMAGNET, LOW);
   // digitalWrite(GREEN_LED, LOW);
-  // sleepStepper(&stepperYState);
+  stepperY.sleepStepper();
   return true;
 }
 

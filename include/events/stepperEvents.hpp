@@ -24,6 +24,7 @@ class StepperState {
 
     int sleepPin;
     int directionPin;
+    int direction; // 1 for one direction, 0 for the other
 
     // stop condition
     StepperStopCondition stopCondition;
@@ -39,7 +40,7 @@ class StepperState {
 
   public:
 
-    StepperState(int stepPin, int sleepPin, int directionPin, unsigned int interval = 2, StepperStopCondition stopCondition = STEPS, void* stopValue = nullptr) {
+    StepperState(int stepPin, int sleepPin, int directionPin, int direction, unsigned int interval = 2, StepperStopCondition stopCondition = STEPS, int targetSteps = 0, unsigned long duration = 0, bool* trigger = nullptr) {
         this->stepPin = stepPin;
         this->sleepPin = sleepPin;
         this->directionPin = directionPin;
@@ -47,26 +48,19 @@ class StepperState {
         pinMode(sleepPin, OUTPUT);
         pinMode(directionPin, OUTPUT);
 
+        if (direction) {
+            digitalWrite(directionPin, HIGH);
+        } else {
+            digitalWrite(directionPin, LOW);
+        }
+
         this->interval = interval;
         this->stepsTaken = 0;
         this->stopCondition = stopCondition;
 
-        switch (stopCondition) {
-            case TIME: {
-                unsigned long* duration = (unsigned long*)stopValue;
-                this->duration = *duration;
-                break;
-            }
-            case STEPS: {
-                int* targetSteps = (int*)stopValue;
-                this->targetSteps = *targetSteps;
-                break;
-            }
-            case TRIGGER: {
-                this->trigger = trigger;
-                break;
-            }
-        }  
+        this->duration = duration;
+        this->targetSteps = targetSteps;
+        this->trigger = trigger;
     }
 
     bool setupStepperEvent(void* context);
