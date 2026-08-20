@@ -8,9 +8,9 @@ enum StepperStopCondition { TIME, STEPS, TRIGGER };
 
 
 struct toolheadPosition {
-    int x;
-    int y;
-    bool down;
+  int x;
+  int y;
+  bool down;
 };
 
 
@@ -19,8 +19,6 @@ class StepperState {
   private:
     int stepPin;
     PinState pinState;
-    unsigned long lastToggleTime;
-    unsigned int interval; // ms between toggles
 
     int sleepPin;
     int directionPin;
@@ -41,27 +39,31 @@ class StepperState {
   public:
 
     StepperState(int stepPin, int sleepPin, int directionPin, int direction, unsigned int interval = 2, StepperStopCondition stopCondition = STEPS, int targetSteps = 0, unsigned long duration = 0, bool* trigger = nullptr) {
-        this->stepPin = stepPin;
-        this->sleepPin = sleepPin;
-        this->directionPin = directionPin;
-        pinMode(stepPin, OUTPUT);
-        pinMode(sleepPin, OUTPUT);
-        pinMode(directionPin, OUTPUT);
+      this->stepPin = stepPin;
+      this->sleepPin = sleepPin;
+      this->directionPin = directionPin;
+      pinMode(stepPin, OUTPUT);
+      pinMode(sleepPin, OUTPUT);
+      pinMode(directionPin, OUTPUT);
 
-        if (direction) {
-            digitalWrite(directionPin, HIGH);
-        } else {
-            digitalWrite(directionPin, LOW);
-        }
+      if (direction) {
+        digitalWrite(directionPin, HIGH);
+      } else {
+          digitalWrite(directionPin, LOW);
+      }
 
-        this->interval = interval;
-        this->stepsTaken = 0;
-        this->stopCondition = stopCondition;
+      this->interval = interval;
+      this->stepsTaken = 0;
+      this->stopCondition = stopCondition;
 
-        this->duration = duration;
-        this->targetSteps = targetSteps;
-        this->trigger = trigger;
+      this->duration = duration;
+      this->targetSteps = targetSteps;
+      this->trigger = trigger;
     }
+
+    unsigned long lastToggleTime;
+    unsigned int interval; // ms between toggles
+
 
     bool setupStepperEvent(void* context);
 
@@ -70,4 +72,8 @@ class StepperState {
     bool wakeStepper();
 
     bool sleepStepper();
+
+    bool setDirection(int direction);
+
+    bool step(); // returns true if step was successful, false if stepper is asleep
 };

@@ -88,6 +88,18 @@ bool StepperState::handleStepper() {
   return false; // Keep waiting
 }
 
+bool StepperState::step() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastToggleTime >= interval) { //if update interval has passed
+    digitalWrite(stepPin, !digitalRead(stepPin)); //toggle physical pin
+    pinState = (pinState == PIN_LOW) ? PIN_HIGH : PIN_LOW; // update pin state
+    lastToggleTime = currentTime;
+    return true;
+  } else {
+    return false; // Not enough time has passed to step
+  }
+}
+
 
 bool StepperState::sleepStepper() {
   digitalWrite(sleepPin, LOW); // sleep pin is active low
@@ -98,5 +110,15 @@ bool StepperState::sleepStepper() {
 bool StepperState::wakeStepper() {
   digitalWrite(sleepPin, HIGH); // sleep pin is active low
   delay(1); // I don't like using a blocking function but I need to block the stepper and its only a short delay called right at the start. I also don't want to bother cause it really doesn't matter.
+  return true;
+}
+
+bool StepperState::setDirection(int direction) {
+  this->direction = direction;
+  if (direction) {
+      digitalWrite(directionPin, HIGH);
+  } else {
+      digitalWrite(directionPin, LOW);
+  }
   return true;
 }
