@@ -88,16 +88,10 @@ bool StepperState::handleStepper() {
   return false; // Keep waiting
 }
 
-bool StepperState::step() {
-  unsigned long currentTime = millis();
-  if (currentTime - lastToggleTime >= interval) { //if update interval has passed
-    digitalWrite(stepPin, !digitalRead(stepPin)); //toggle physical pin
-    pinState = (pinState == PIN_LOW) ? PIN_HIGH : PIN_LOW; // update pin state
-    lastToggleTime = currentTime;
-    return true;
-  } else {
-    return false; // Not enough time has passed to step
-  }
+void StepperState::step() { 
+  digitalWrite(stepPin, !digitalRead(stepPin)); //toggle physical pin
+  pinState = (pinState == PIN_LOW) ? PIN_HIGH : PIN_LOW; // update pin state
+  lastToggleTime = millis();
 }
 
 

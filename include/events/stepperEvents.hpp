@@ -75,5 +75,5 @@ class StepperState {
 
     bool setDirection(int direction);
 
-    bool step(); // returns true if step was successful, false if stepper is asleep
+    void step(); // has no checks for the interval, is just a raw step
 };
