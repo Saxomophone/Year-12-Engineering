@@ -30,6 +30,10 @@ class MotionHandler2D {
     bool setupMotionEvent(void* context);
 
     bool handleMotion();
+
+    bool wakeMotion();
+
+    bool sleepMotion();
 };
 
 struct MotionParameters {

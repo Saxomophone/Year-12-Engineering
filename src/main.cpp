@@ -4,6 +4,7 @@
 #include "events/stepperEvents.hpp"
 #include "pin.hpp"
 #include "events/motionEvents.hpp"
+#include "gcodeScheduler.hpp"
 
 // #define THERMISTOR A0
 // #define ELECTROMAGNET A4
@@ -60,6 +61,9 @@ bool toolheadAttached = false;
 bool areaObstructed = false;
 
 StepperState stepperY{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 0, 0, nullptr};
+StepperState stepperX{STEPPER_X_STEP, STEPPER_X_SLEEP, STEPPER_X_DIR, 0, 2, STEPS, 0, 0, nullptr};
+
+MotionHandler2D motionHandler{&stepperY, &stepperX};
 
 
 void setup() {
@@ -73,6 +77,12 @@ void setup() {
   // pinMode(ECHO_PIN, INPUT);
 
   Serial.begin(9600);
+  nextInstruction(); 
+  nextInstruction(); 
+  nextInstruction(); 
+  nextInstruction(); 
+  nextInstruction(); 
+
 
   // init
   // analogWrite(SERVO, 210); // ensures servo is in open position
@@ -95,36 +105,61 @@ void setup() {
 
   // // schedule events for testing 
 
-  stepperY.sleepStepper(); // ensure stepper is asleep at start
+  motionHandler.sleepMotion();
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->wakeMotion();
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{100, 100, true});
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
+ 
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{0, 0, true});
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
 
   
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    StepperState* stepper = (StepperState*)context;
-    stepper->wakeStepper();
-    return true;
-  }, &stepperY); 
+  // scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+  //   StepperState* stepper = (StepperState*)context;
+  //   stepper->wakeStepper();
+  //   return true;
+  // }, &stepperY); 
 
-  scheduler.push([](void* context) {
-    StepperState* stepper = (StepperState*)context;
-    stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 200, 0, nullptr});
-    return true;
-  }, &stepperY);
+  // scheduler.push([](void* context) {
+  //   StepperState* stepper = (StepperState*)context;
+  //   stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 200, 0, nullptr});
+  //   return true;
+  // }, &stepperY);
 
-  scheduler.push([](void* context) {
-    StepperState* stepper = (StepperState*)context;
-    return stepper->handleStepper();
-  }, &stepperY);
+  // scheduler.push([](void* context) {
+  //   StepperState* stepper = (StepperState*)context;
+  //   return stepper->handleStepper();
+  // }, &stepperY);
 
-  scheduler.push([](void* context) {
-    StepperState* stepper = (StepperState*)context;
-    stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 1, 2, STEPS, 500, 0, nullptr});
-    return true;
-  }, &stepperY);
+  // scheduler.push([](void* context) {
+  //   StepperState* stepper = (StepperState*)context;
+  //   stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 1, 2, STEPS, 400, 0, nullptr});
+  //   return true;
+  // }, &stepperY);
 
-  scheduler.push([](void* context) {
-    StepperState* stepper = (StepperState*)context;
-    return stepper->handleStepper();
-  }, &stepperY);
+  // scheduler.push([](void* context) {
+  //   StepperState* stepper = (StepperState*)context;
+  //   return stepper->handleStepper();
+  // }, &stepperY);
 
   
 
@@ -159,7 +194,7 @@ void setup() {
   // }, &delayState1);
   // scheduler.push(handleDelay, &delayState1); // delay for 10 seconds with updated duration
 
-  // scheduler.push(off, nullptr);
+  scheduler.push(off, nullptr);
 }
 
 

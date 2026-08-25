@@ -4,6 +4,7 @@
 // going to be using whole steps for ease for this prototype
 #define MM_PER_STEP 8/(360/1.8)  // 1.8 degrees per step so 360/1.8 steps in a revolution. one revolution is 8mm so one step is 8/200 = 0.04mm per step
 #define STEPS_PER_MM (1/MM_PER_STEP) // 25 steps per mm
+#define MIN_STEP_DISTANCE 0.04 // minimum distance to move in mm, which is one step
 
 
 bool MotionHandler2D::setupMotionEvent(void* context) {
@@ -39,8 +40,8 @@ bool MotionHandler2D::handleMotion() {
 
   unsigned long currentTime = millis();
   
-  if (currentX != targetX ) {  // if the current x position is not equal to the target x position, we need to step the x motor
-    if (currentTime - stepperX->lastToggleTime >= stepperX->interval) {
+  if (abs(currentX - targetX) > MIN_STEP_DISTANCE ) {  // if the current x position is not equal to the target x position, we need to step the x motor
+    if ((currentTime - stepperX->lastToggleTime) >= stepperX->interval) {
       if (queueX >= 1) {
         (*stepperX).step();
         queueX--;
@@ -48,12 +49,30 @@ bool MotionHandler2D::handleMotion() {
     }
   }
 
-  if (currentY != targetY) {  // if the current y position is not equal to the target y position, we need to step the y motor
-    if (currentTime - stepperY->lastToggleTime >= stepperY->interval) {
+  if (abs(currentY - targetY) > MIN_STEP_DISTANCE) {  // if the current y position is not equal to the target y position, we need to step the y motor
+    if ((currentTime - stepperY->lastToggleTime) >= stepperY->interval) {
       if (queueY >= 1) {
         (*stepperY).step();
         queueY--;
       }
     }
   }
+  
+  if (abs(currentY - targetY) < MIN_STEP_DISTANCE && abs(currentY - targetY) < MIN_STEP_DISTANCE) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool MotionHandler2D::wakeMotion() {
+  stepperY->wakeStepper();
+  stepperX->wakeStepper();
+  return true;
+}
+
+bool MotionHandler2D::sleepMotion() {
+  stepperY->sleepStepper();
+  stepperX->sleepStepper();
+  return true;
 }
