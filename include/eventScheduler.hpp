@@ -9,7 +9,7 @@ class EventScheduler {
   private:
     typedef bool (*EventHandler)(void *context);
     
-    static const int MAX_EVENTS = 20;
+    static const int MAX_EVENTS = 30;
     static const int MAX_LISTENERS = 5;
 
     EventHandler handlers[MAX_EVENTS]; // Array to hold event handlers
@@ -28,7 +28,7 @@ class EventScheduler {
     // Initialize all listeners to default state
     void initListeners();
 
-    int addListener(bool* targetFlag, ListenerFunction listenerFunction, Listener* listener);
+    int addListener(bool* targetFlag, ListenerFunction listenerFunction);
 
     void removeListener(int id);
 

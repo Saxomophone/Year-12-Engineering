@@ -5,6 +5,8 @@
 #include "pin.hpp"
 #include "events/motionEvents.hpp"
 #include "gcodeScheduler.hpp"
+#include "main.hpp"
+#include "listeners/limits.hpp"
 
 // #define THERMISTOR A0
 // #define ELECTROMAGNET A4
@@ -19,10 +21,9 @@
 
 #define STEPPER_Y_DIR 2
 #define STEPPER_Y_STEP 3
-#define STEPPER_Y_SLEEP 4
-#define STEPPER_X_DIR 999
-#define STEPPER_X_STEP 999
-#define STEPPER_X_SLEEP 999
+#define STEPPER_X_DIR 4
+#define STEPPER_X_STEP 5
+#define STEPPER_SLEEP 6
 
 
 // physical limits of the area in mm
@@ -47,6 +48,8 @@ bool handleDelay(void* context);
 bool resetDelay(void* context);
 bool driver_overheated();
 bool area_obstructed();
+bool x_limit_button();
+bool y_limit_button();
 
 // Define a type for a function taking no args and returning void
 typedef bool (*EventHandler)(void *context);
@@ -54,14 +57,15 @@ typedef bool (*EventHandler)(void *context);
 
 struct DelayState { unsigned long startTime; unsigned long duration; };
 
+DelayState delayState1{0, 0};
 
 EventScheduler scheduler;
 bool stepperOverheated = false;
-bool toolheadAttached = false;
 bool areaObstructed = false;
 
-StepperState stepperY{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 0, 0, nullptr};
-StepperState stepperX{STEPPER_X_STEP, STEPPER_X_SLEEP, STEPPER_X_DIR, 0, 2, STEPS, 0, 0, nullptr};
+
+StepperState stepperY{STEPPER_Y_STEP, STEPPER_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 0, 0, nullptr};
+StepperState stepperX{STEPPER_X_STEP, STEPPER_SLEEP, STEPPER_X_DIR, 0, 2, STEPS, 0, 0, nullptr};
 
 MotionHandler2D motionHandler{&stepperY, &stepperX};
 
@@ -77,20 +81,18 @@ void setup() {
   // pinMode(ECHO_PIN, INPUT);
 
   Serial.begin(9600);
-  nextInstruction(); 
-  nextInstruction(); 
-  nextInstruction(); 
-  nextInstruction(); 
-  nextInstruction(); 
+   Serial.println("Starting setup...");
 
+  // nextInstruction(); 
+  // nextInstruction(); 
+  // nextInstruction(); 
+  // nextInstruction(); 
+  // nextInstruction(); 
 
-  // init
-  // analogWrite(SERVO, 210); // ensures servo is in open position
-  // digitalWrite(ELECTROMAGNET, LOW);
-  // digitalWrite(GREEN_LED, HIGH);
   scheduler.initListeners();
+  initLimits(&scheduler);
 
-  Serial.println("Starting setup...");
+ 
 
 
   // add listeners
@@ -103,9 +105,14 @@ void setup() {
   // Listener areaObstructionListener;
   // scheduler.addListener(&areaObstructed, area_obstructed, &areaObstructionListener);
 
-  // // schedule events for testing 
-
   motionHandler.sleepMotion();
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    DelayState* state = (DelayState*)context;
+    state->duration = 1000;
+    return true;
+  }, &delayState1);
+  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
 
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
@@ -118,81 +125,48 @@ void setup() {
   }, &motionHandler); 
 
   scheduler.push([](void* context) {
+    Serial.println("moving to (100, 100)");
+    return true;
+  }, nullptr);
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    DelayState* state = (DelayState*)context;
+    state->duration = 1000;
+    return true;
+  }, &delayState1);
+  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+
+  scheduler.push([](void* context) {
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
     return motionHandler->handleMotion();
   }, &motionHandler);
  
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{0, 0, true});
+    return motionHandler->setupMotionEvent(new MotionParameters{80, 0, true});
   }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    Serial.println("moving to (80, 0)");
+    return true;
+  }, nullptr);
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    DelayState* state = (DelayState*)context;
+    state->duration = 1000;
+    return true;
+  }, &delayState1);
+  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
 
   scheduler.push([](void* context) {
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
     return motionHandler->handleMotion();
   }, &motionHandler);
 
-  
-  // scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-  //   StepperState* stepper = (StepperState*)context;
-  //   stepper->wakeStepper();
-  //   return true;
-  // }, &stepperY); 
-
-  // scheduler.push([](void* context) {
-  //   StepperState* stepper = (StepperState*)context;
-  //   stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 200, 0, nullptr});
-  //   return true;
-  // }, &stepperY);
-
-  // scheduler.push([](void* context) {
-  //   StepperState* stepper = (StepperState*)context;
-  //   return stepper->handleStepper();
-  // }, &stepperY);
-
-  // scheduler.push([](void* context) {
-  //   StepperState* stepper = (StepperState*)context;
-  //   stepper->setupStepperEvent(new StepperState{STEPPER_Y_STEP, STEPPER_Y_SLEEP, STEPPER_Y_DIR, 1, 2, STEPS, 400, 0, nullptr});
-  //   return true;
-  // }, &stepperY);
-
-  // scheduler.push([](void* context) {
-  //   StepperState* stepper = (StepperState*)context;
-  //   return stepper->handleStepper();
-  // }, &stepperY);
-
-  
-
-  // // StepperResetPackage *setupPackage = new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2};
-  // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, LOW); return true;}, nullptr);
-  // scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, TRIGGER, &toolheadAttached, 2}); // move stepper until toolhead is detected by switch
-  // scheduler.push(handleStepper, &stepperYState);
-  
-  // scheduler.push([](void*) {digitalWrite(ELECTROMAGNET, HIGH); return true;}, nullptr); // turn on electromagnet to grab toolhead
-
-  // DelayState delayState1 = { 0, 500 }; // 500ms delay
-  // scheduler.push(resetDelay, &delayState1); // resets the timer for the delay handler
-  // scheduler.push(handleDelay, &delayState1);
-
-  // scheduler.push([](void*) {digitalWrite(STEPPER_Y_DIR, HIGH); return true;}, nullptr);
-  // scheduler.push(setupStepper, new StepperResetPackage{&stepperYState, TIME, new unsigned long(5000), 2}); // move stepper for 5 seconds
-  // scheduler.push(handleStepper, &stepperYState);
-
-  // scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-  //   DelayState* state = (DelayState*)context;
-  //   state->duration = 1000;
-  //   return true;
-  // }, &delayState1);
-  // scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
-
-  // scheduler.push([](void*) {analogWrite(SERVO, 90); return true;}, nullptr); // activate tool using servo (move to down position)
-
-  // scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-  //   DelayState* state = (DelayState*)context;
-  //   state->duration = 10000;
-  //   return true;
-  // }, &delayState1);
-  // scheduler.push(handleDelay, &delayState1); // delay for 10 seconds with updated duration
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->sleepMotion();
+  }, &motionHandler); 
 
   scheduler.push(off, nullptr);
 }
@@ -209,7 +183,12 @@ void loop() {
   // Serial.println("StepperOverheated: " + String(stepperOverheated ? "True" : "False"));
   // Serial.println("Stepper Heat: " + String(analogRead(THERMISTOR)));
   // Serial.println("ToolheadAttached: " + String(toolheadAttached ? "True" : "False"));
-  
+
+
+  if (xLimitReached) { Serial.println("x limit reached"); }
+  if (yLimitReached) { Serial.println("y limit reached"); }
+
+
   // if (stepperOverheated) {
   //   Serial.println("Stepper overheated! Current thermistor reading: " + String(analogRead(THERMISTOR)));
   //   panic();
@@ -379,3 +358,8 @@ bool resetDelay(void* context) {
 //     delay(2);
 //   }
 //}
+
+float decimalRound(float input, int decimals) {
+  float scale=pow(10,decimals);
+  return round(input*scale)/scale;
+}

@@ -22,7 +22,6 @@ class StepperState {
 
     int sleepPin;
     int directionPin;
-    int direction; // 1 for one direction, 0 for the other
 
     // stop condition
     StepperStopCondition stopCondition;
@@ -63,6 +62,8 @@ class StepperState {
 
     unsigned long lastToggleTime;
     unsigned int interval; // ms between toggles
+    int direction; // 1 for one direction, -1 for the other
+
 
 
     bool setupStepperEvent(void* context);

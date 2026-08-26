@@ -96,7 +96,7 @@ void StepperState::step() {
 
 
 bool StepperState::sleepStepper() {
-  digitalWrite(sleepPin, LOW); // sleep pin is active low
+  digitalWrite(sleepPin, LOW); // sleep pin is active low (asleep when low)
   return true;
 }
 
@@ -109,7 +109,7 @@ bool StepperState::wakeStepper() {
 
 bool StepperState::setDirection(int direction) {
   this->direction = direction;
-  if (direction) {
+  if (direction == 1) {
       digitalWrite(directionPin, HIGH);
   } else {
       digitalWrite(directionPin, LOW);

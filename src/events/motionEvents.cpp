@@ -1,5 +1,7 @@
 #include "Arduino.h"
 #include "events/motionEvents.hpp"
+#include "main.hpp"
+#include "listeners/limits.hpp"
 
 // going to be using whole steps for ease for this prototype
 #define MM_PER_STEP 8/(360/1.8)  // 1.8 degrees per step so 360/1.8 steps in a revolution. one revolution is 8mm so one step is 8/200 = 0.04mm per step
@@ -14,7 +16,7 @@ bool MotionHandler2D::setupMotionEvent(void* context) {
 
   // Calculate the distance to move in each direction
   float deltaX = targetX - currentX;
-  float deltaY = targetX - currentY;
+  float deltaY = targetY - currentY;
 
   queueX = 0;
   queueY = 0;
@@ -25,8 +27,8 @@ bool MotionHandler2D::setupMotionEvent(void* context) {
   ratioY = (deltaX != 0) ? abs(deltaY / deltaX) : 1;  
 
   // Set the direction for each stepper based on the sign of deltaX and deltaY
-  (*stepperX).setDirection(deltaX >= 0 ? 1 : 0);
-  (*stepperY).setDirection(deltaY >= 0 ? 1 : 0);
+  stepperX->setDirection(deltaX >= 0 ? 1 : -1);
+  stepperY->setDirection(deltaY >= 0 ? 1 : -1);
 
   return true;
 }
@@ -34,31 +36,38 @@ bool MotionHandler2D::setupMotionEvent(void* context) {
 bool MotionHandler2D::handleMotion() {
   if (queueX < 1 && queueY < 1) {
     // proceed to next set of steps
-    queueX++;
-    queueY += ratioY; // increment the queue for y steps based on the ratio of deltaY to deltaX
+    if (decimalRound(abs(targetX - currentX), 2) >= MIN_STEP_DISTANCE ) {
+      queueX++;
+    }
+    if (decimalRound(abs(targetY - currentY), 2) >= MIN_STEP_DISTANCE ) {
+      queueY += ratioY;
+    } // increment the queue for y steps based on the ratio of deltaY to deltaX
   }
 
   unsigned long currentTime = millis();
   
-  if (abs(currentX - targetX) > MIN_STEP_DISTANCE ) {  // if the current x position is not equal to the target x position, we need to step the x motor
+  if (decimalRound(abs(targetX - currentX), 2) >= MIN_STEP_DISTANCE ) {  // if the current x position is not equal to the target x position, we need to step the x motor
     if ((currentTime - stepperX->lastToggleTime) >= stepperX->interval) {
       if (queueX >= 1) {
-        (*stepperX).step();
+        stepperX->step();
+        currentX += MM_PER_STEP * stepperX->direction;
         queueX--;
       }
     }
   }
 
-  if (abs(currentY - targetY) > MIN_STEP_DISTANCE) {  // if the current y position is not equal to the target y position, we need to step the y motor
+  if (decimalRound(abs(targetY - currentY), 2) >= MIN_STEP_DISTANCE) {  // if the current y position is not equal to the target y position, we need to step the y motor
     if ((currentTime - stepperY->lastToggleTime) >= stepperY->interval) {
       if (queueY >= 1) {
-        (*stepperY).step();
+        stepperY->step();
+        currentY += MM_PER_STEP * stepperY->direction;
         queueY--;
       }
     }
   }
   
-  if (abs(currentY - targetY) < MIN_STEP_DISTANCE && abs(currentY - targetY) < MIN_STEP_DISTANCE) {
+  // Serial.println("deltaX = " + String(targetX - currentX) + " deltaY = " + String(targetY - currentY));
+  if (decimalRound(abs(targetY - currentY), 2) < MIN_STEP_DISTANCE && decimalRound(abs(targetY - currentY), 2) < MIN_STEP_DISTANCE) {
     return true;
   } else {
     return false;
@@ -75,4 +84,48 @@ bool MotionHandler2D::sleepMotion() {
   stepperY->sleepStepper();
   stepperX->sleepStepper();
   return true;
+}
+
+bool MotionHandler2D::setupHoming() {
+  stepperX->setDirection(-1);
+  stepperY->setDirection(-1);
+
+  stepperX->lastToggleTime = millis();
+  stepperY->lastToggleTime = millis();
+
+  stepperX->interval = 2;
+  stepperY->interval = 2;
+
+  xHomed = false;
+  yHomed = false;
+  
+  return true;
+}
+
+bool MotionHandler2D::homeToolhead() {
+  if (!xHomed) {
+    if (xLimitReached) {
+      xHomed = true;
+      currentX = 0;
+      return true;
+    } else {
+      if (stepperX->lastToggleTime - millis() >= stepperX->interval) {
+        stepperX->step();
+        return false;
+      }
+    }
+  } else if (!yHomed) {
+    if (yLimitReached) {
+      yHomed = true;
+      currentY = 0;
+      return true;
+    } else {
+      if (stepperY->lastToggleTime - millis() >= stepperY->interval) {
+        stepperY->step();
+        return false;
+      }
+    }
+  }
+
+  return false; // I don't see what case could cause this code to even run but there for redundancy
 }

@@ -39,10 +39,11 @@ void EventScheduler::initListeners() {
   }
 }
 
-int EventScheduler::addListener(bool* targetFlag, ListenerFunction listenerFunction, Listener* listener) {
+int EventScheduler::addListener(bool* targetFlag, ListenerFunction listenerFunction) {
   if (listenerCount < MAX_LISTENERS) {
     for (int i = 0; i < MAX_LISTENERS; i++) {
       if (listeners[i] == nullptr) {
+        Listener* listener = new Listener();
 
         // setup listener by assigning values to state struct
         listener->id = i; // assign id to state

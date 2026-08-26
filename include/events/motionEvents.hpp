@@ -17,6 +17,9 @@ class MotionHandler2D {
     float queueY; // queue for y steps to be taken
     float queueX; // queue for x steps to be taken
     float ratioY; // ratio of deltaY to deltaX;
+    
+    bool xHomed;
+    bool yHomed;
 
     StepperState *stepperY; // important that both steppers have the same interval
     StepperState *stepperX;
@@ -34,6 +37,10 @@ class MotionHandler2D {
     bool wakeMotion();
 
     bool sleepMotion();
+
+    bool setupHoming();
+
+    bool homeToolhead();
 };
 
 struct MotionParameters {
