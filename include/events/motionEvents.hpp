@@ -5,8 +5,8 @@
 
 class MotionHandler2D {
   private:
-    float currentX;
-    float currentY;
+    float currentX = -1;
+    float currentY = -1;
 
     float targetX;
     float targetY;
@@ -41,6 +41,8 @@ class MotionHandler2D {
     bool setupHoming();
 
     bool homeToolhead();
+
+    float* getCurrentPosition();
 };
 
 struct MotionParameters {

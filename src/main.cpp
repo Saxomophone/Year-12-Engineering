@@ -25,6 +25,8 @@
 #define STEPPER_X_STEP 5
 #define STEPPER_SLEEP 6
 
+#define SERIAL_UPDATE_INTERVAL 500 //ms
+
 
 // physical limits of the area in mm
 int X_LIMIT = 200;
@@ -35,6 +37,7 @@ int Y_LIMIT = 200;
 
 int steps_per_rev = 200; // 360/1.8
 unsigned long prev_millis = 0;
+unsigned long lastSerialUpdate = 0; // Declare and initialize lastSerialUpdate
 
 // unsigned long prevUltrasonic_ms = 0;
 
@@ -69,6 +72,8 @@ StepperState stepperX{STEPPER_X_STEP, STEPPER_SLEEP, STEPPER_X_DIR, 0, 2, STEPS,
 
 MotionHandler2D motionHandler{&stepperY, &stepperX};
 
+GcodeSchedulePackage* gcodeInstructionPackage;
+
 
 void setup() {
   // setup pins
@@ -81,7 +86,7 @@ void setup() {
   // pinMode(ECHO_PIN, INPUT);
 
   Serial.begin(9600);
-   Serial.println("Starting setup...");
+  Serial.println("Starting setup...");
 
   // nextInstruction(); 
   // nextInstruction(); 
@@ -92,7 +97,9 @@ void setup() {
   scheduler.initListeners();
   initLimits(&scheduler);
 
- 
+  // init Gcode Processor
+  gcodeInstructionPackage->motionHandler = &motionHandler;
+  gcodeInstructionPackage->scheduler = &scheduler;
 
 
   // add listeners
@@ -113,6 +120,16 @@ void setup() {
     return true;
   }, &delayState1);
   scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupHoming();
+  }, &motionHandler);
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->homeToolhead();
+  }, &motionHandler);
 
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
@@ -178,15 +195,18 @@ void loop() {
   // analogWrite(SERVO, 210);
   // delay(500);
 
+  // if (numInstructions > 0 && scheduler.numFreeEvents() >= 5) {
+  //   GcodeInstruction newInstruction = preProcessInstruction();
+  //   gcodeInstructionPackage->instruction = newInstruction;
+  //   scheduleInstruction(gcodeInstructionPackage);
+  //   numInstructions--;
+  // }
+
 
   scheduler.processNext(); // Call this repeatedly in the loop to process events
   // Serial.println("StepperOverheated: " + String(stepperOverheated ? "True" : "False"));
   // Serial.println("Stepper Heat: " + String(analogRead(THERMISTOR)));
   // Serial.println("ToolheadAttached: " + String(toolheadAttached ? "True" : "False"));
-
-
-  if (xLimitReached) { Serial.println("x limit reached"); }
-  if (yLimitReached) { Serial.println("y limit reached"); }
 
 
   // if (stepperOverheated) {
@@ -198,6 +218,11 @@ void loop() {
   //   Serial.println("Area obstructed!");
   //   panic();
   // }
+  
+  if (millis() - lastSerialUpdate >= SERIAL_UPDATE_INTERVAL) {
+    lastSerialUpdate = millis();
+    Serial.println("(" + String(motionHandler.getCurrentPosition()[0]) + ", " + String(motionHandler.getCurrentPosition()[1]) + ")");
+  }
 
   if (scheduler.isEmpty()) {
     Serial.println("All events completed");

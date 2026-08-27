@@ -91,3 +91,8 @@ void EventScheduler::callListeners() {
     }
   }
 }
+
+
+int EventScheduler::numFreeEvents() {
+  return MAX_EVENTS - eventCount;
+}

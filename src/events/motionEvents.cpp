@@ -96,6 +96,8 @@ bool MotionHandler2D::setupHoming() {
   stepperX->interval = 2;
   stepperY->interval = 2;
 
+  wakeMotion();
+
   xHomed = false;
   yHomed = false;
   
@@ -104,12 +106,13 @@ bool MotionHandler2D::setupHoming() {
 
 bool MotionHandler2D::homeToolhead() {
   if (!xHomed) {
+    // Serial.println("x not homed");
     if (xLimitReached) {
       xHomed = true;
       currentX = 0;
-      return true;
+      return false; // return false as still need to home Y
     } else {
-      if (stepperX->lastToggleTime - millis() >= stepperX->interval) {
+      if (millis() - stepperX->lastToggleTime >= stepperX->interval) {
         stepperX->step();
         return false;
       }
@@ -120,7 +123,7 @@ bool MotionHandler2D::homeToolhead() {
       currentY = 0;
       return true;
     } else {
-      if (stepperY->lastToggleTime - millis() >= stepperY->interval) {
+      if (millis() - stepperY->lastToggleTime >= stepperY->interval) {
         stepperY->step();
         return false;
       }
@@ -128,4 +131,12 @@ bool MotionHandler2D::homeToolhead() {
   }
 
   return false; // I don't see what case could cause this code to even run but there for redundancy
+}
+
+
+float* MotionHandler2D::getCurrentPosition() {
+  static float position[2];
+  position[0] = currentX;
+  position[1] = currentY;
+  return position;
 }

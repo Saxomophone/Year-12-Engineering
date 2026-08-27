@@ -33,4 +33,7 @@ class EventScheduler {
     void removeListener(int id);
 
     void callListeners();
+
+    // returns how much space left for events
+    int numFreeEvents();
 }; 
