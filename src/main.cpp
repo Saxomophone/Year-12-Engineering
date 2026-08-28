@@ -114,12 +114,28 @@ void setup() {
 
   motionHandler.sleepMotion();
 
-  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-    DelayState* state = (DelayState*)context;
-    state->duration = 1000;
-    return true;
-  }, &delayState1);
-  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+  // scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+  //   DelayState* state = (DelayState*)context;
+  //   state->duration = 1000;
+  //   return true;
+  // }, &delayState1);
+  // scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->wakeMotion();
+  }, &motionHandler); 
+
+  // scheduler.push([](void* context) {
+  //   StepperState* stepper = (StepperState*)context;
+  //   stepper->setupStepperEvent(new StepperState{STEPPER_X_STEP, STEPPER_SLEEP, STEPPER_X_DIR, 0, 2, STEPS, 200, 0, nullptr});
+  //   return true;
+  // }, &stepperX);
+
+  // scheduler.push([](void* context) {
+  //   StepperState* stepper = (StepperState*)context;
+  //   return stepper->handleStepper();
+  // }, &stepperX);
 
   scheduler.push([](void* context) {
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
@@ -133,18 +149,13 @@ void setup() {
 
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->wakeMotion();
+    return motionHandler->setupMotionEvent(new MotionParameters{101.882, 99.432, false});
   }, &motionHandler); 
 
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{100, 100, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    Serial.println("moving to (100, 100)");
-    return true;
-  }, nullptr);
+  // scheduler.push([](void* context) {
+  //   Serial.println("moving to (100, 100)");
+  //   return true;
+  // }, nullptr);
 
   scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
     DelayState* state = (DelayState*)context;
@@ -160,20 +171,58 @@ void setup() {
  
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{80, 0, true});
+    return motionHandler->setupMotionEvent(new MotionParameters{48.876, 55.192, true});
   }, &motionHandler); 
 
   scheduler.push([](void* context) {
-    Serial.println("moving to (80, 0)");
-    return true;
-  }, nullptr);
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
 
-  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-    DelayState* state = (DelayState*)context;
-    state->duration = 1000;
-    return true;
-  }, &delayState1);
-  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{100.505, 204.067, true});
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{179.67, 169.648, true});
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{101.882, 99.432, true});
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{0, 0, true});
+  }, &motionHandler); 
+
+  scheduler.push([](void* context) {
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->handleMotion();
+  }, &motionHandler);
+
+  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
+    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
+    return motionHandler->setupMotionEvent(new MotionParameters{80, 0, true});
+  }, &motionHandler); 
 
   scheduler.push([](void* context) {
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
