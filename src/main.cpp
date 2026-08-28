@@ -27,6 +27,9 @@
 
 #define SERIAL_UPDATE_INTERVAL 500 //ms
 
+#define PANIC_LED_PIN -1
+#define THERMISTOR -1
+
 
 // physical limits of the area in mm
 int X_LIMIT = 200;
@@ -101,13 +104,15 @@ void setup() {
   gcodeInstructionPackage->motionHandler = &motionHandler;
   gcodeInstructionPackage->scheduler = &scheduler;
 
+  //init pins
+  pinMode(PANIC_LED_PIN, OUTPUT);
+
 
   // add listeners
   // Listener toolheadAttachedListener;
   // scheduler.addListener(&toolheadAttached, toolhead_in_place, &toolheadAttachedListener);
 
-  // Listener stepperOverheatListener;
-  // scheduler.addListener(&stepperOverheated, driver_overheated, &stepperOverheatListener);
+  scheduler.addListener(&stepperOverheated, driver_overheated);
 
   // Listener areaObstructionListener;
   // scheduler.addListener(&areaObstructed, area_obstructed, &areaObstructionListener);
@@ -258,10 +263,10 @@ void loop() {
   // Serial.println("ToolheadAttached: " + String(toolheadAttached ? "True" : "False"));
 
 
-  // if (stepperOverheated) {
-  //   Serial.println("Stepper overheated! Current thermistor reading: " + String(analogRead(THERMISTOR)));
-  //   panic();
-  // }
+  if (stepperOverheated) {
+    Serial.println("Stepper overheated! Current thermistor reading: " + String(analogRead(THERMISTOR)));
+    panic();
+  }
   
   // if (areaObstructed) {
   //   Serial.println("Area obstructed!");
@@ -283,17 +288,15 @@ void loop() {
 }
 
 void panic() {
-  // if (!toolheadAttached) {
-  //   digitalWrite(ELECTROMAGNET, LOW);
-  // }
   Serial.println("panic");
+  motionHandler.sleepMotion();
   // sleepStepper(&stepperYState);  
-  // while (true) {
-  //     digitalWrite(GREEN_LED, HIGH);
-  //     delay(500);
-  //     digitalWrite(GREEN_LED, LOW);
-  //     delay(500);
-  // } // halts program
+  while (true) {
+      digitalWrite(PANIC_LED_PIN, HIGH);
+      delay(500);
+      digitalWrite(PANIC_LED_PIN, LOW);
+      delay(500);
+  } // halts program
 }
 
 bool off(void* context) {
@@ -303,10 +306,10 @@ bool off(void* context) {
   return true;
 }
 
-// bool driver_overheated() {
-//   int thermistor_read = analogRead(THERMISTOR);
-//   return thermistor_read > 590;
-// }
+bool driver_overheated() {
+  int thermistor_read = analogRead(THERMISTOR);
+  return thermistor_read > 590;
+}
 
 // bool area_obstructed() {
 //   if (millis() - prevUltrasonic_ms <= 1000) {
