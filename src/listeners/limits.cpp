@@ -5,7 +5,7 @@
 #include "Arduino.h"
 
 #define X_LIMIT_PIN 8
-#define Y_LIMIT_PIN 9
+#define Y_LIMIT_PIN 8
 
 bool xLimitReached = false;
 bool yLimitReached = false;

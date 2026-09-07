@@ -105,11 +105,13 @@ bool MotionHandler2D::setupHoming() {
 }
 
 bool MotionHandler2D::homeToolhead() {
+  static int xHomedTime = 0;
   if (!xHomed) {
     // Serial.println("x not homed");
     if (xLimitReached) {
       xHomed = true;
       currentX = 0;
+      xHomedTime = millis();
       return false; // return false as still need to home Y
     } else {
       if (millis() - stepperX->lastToggleTime >= stepperX->interval) {
@@ -117,7 +119,7 @@ bool MotionHandler2D::homeToolhead() {
         return false;
       }
     }
-  } else if (!yHomed) {
+  } else if (!yHomed && millis() - xHomedTime >= 1000) { // wait 1000ms after homing X before homing Y
     if (yLimitReached) {
       yHomed = true;
       currentY = 0;

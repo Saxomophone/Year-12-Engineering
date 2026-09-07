@@ -7,6 +7,7 @@
 #include "gcodeScheduler.hpp"
 #include "main.hpp"
 #include "listeners/limits.hpp"
+#include "events/servoEvents.hpp"
 
 // #define THERMISTOR A0
 // #define ELECTROMAGNET A4
@@ -27,8 +28,11 @@
 
 #define SERIAL_UPDATE_INTERVAL 500 //ms
 
-#define PANIC_LED_PIN -1
-#define THERMISTOR -1
+#define PANIC_LED_PIN 9
+#define THERMISTOR A0
+#define PANIC_SWITCH 10
+#define UlTRASONIC_READ 12
+#define SERVO_PIN 11
 
 
 // physical limits of the area in mm
@@ -61,13 +65,17 @@ bool y_limit_button();
 typedef bool (*EventHandler)(void *context);
 
 
-struct DelayState { unsigned long startTime; unsigned long duration; };
+struct DelayState { 
+  unsigned long startTime; 
+  unsigned long duration; 
+};
 
 DelayState delayState1{0, 0};
 
 EventScheduler scheduler;
 bool stepperOverheated = false;
 bool areaObstructed = false;
+bool panicSwitchPressed = false;
 
 
 StepperState stepperY{STEPPER_Y_STEP, STEPPER_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 0, 0, nullptr};
@@ -76,6 +84,8 @@ StepperState stepperX{STEPPER_X_STEP, STEPPER_SLEEP, STEPPER_X_DIR, 0, 2, STEPS,
 MotionHandler2D motionHandler{&stepperY, &stepperX};
 
 GcodeSchedulePackage* gcodeInstructionPackage;
+
+Servo toolheadLockServo;
 
 
 void setup() {
@@ -99,6 +109,7 @@ void setup() {
 
   scheduler.initListeners();
   initLimits(&scheduler);
+  toolheadLockServo.setup(SERVO_PIN);
 
   // init Gcode Processor
   gcodeInstructionPackage->motionHandler = &motionHandler;
@@ -106,6 +117,8 @@ void setup() {
 
   //init pins
   pinMode(PANIC_LED_PIN, OUTPUT);
+  pinMode(PANIC_SWITCH, INPUT_PULLUP);
+  pinMode(UlTRASONIC_READ, INPUT_PULLUP); //connected to other microcontroller which will ground when senses ultrasonic blocked
 
 
   // add listeners
@@ -113,6 +126,8 @@ void setup() {
   // scheduler.addListener(&toolheadAttached, toolhead_in_place, &toolheadAttachedListener);
 
   scheduler.addListener(&stepperOverheated, driver_overheated);
+  scheduler.addListener(&panicSwitchPressed, *[]()->bool{return !digitalRead(PANIC_SWITCH);});
+  scheduler.addListener(&areaObstructed, *[]()->bool{return !digitalRead(UlTRASONIC_READ);});
 
   // Listener areaObstructionListener;
   // scheduler.addListener(&areaObstructed, area_obstructed, &areaObstructionListener);
@@ -125,6 +140,27 @@ void setup() {
   //   return true;
   // }, &delayState1);
   // scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    int* angle = (int*)context;
+    toolheadLockServo.setAngle(*angle);
+    return true;
+  }, new int(180)); // set servo to open position
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    DelayState* state = (DelayState*)context;
+    state->startTime = millis();
+    state->duration = 1000;
+    return true;
+  }, &delayState1);
+
+  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
+
+  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
+    int* angle = (int*)context;
+    toolheadLockServo.setAngle(*angle);
+    return true;
+  }, new int(0)); // set servo to open position
 
   scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
     MotionHandler2D* motionHandler = (MotionHandler2D*)context;
@@ -268,14 +304,21 @@ void loop() {
     panic();
   }
   
-  // if (areaObstructed) {
-  //   Serial.println("Area obstructed!");
-  //   panic();
-  // }
+  if (areaObstructed) {
+    Serial.println("Area obstructed!");
+    Serial.println(digitalRead(UlTRASONIC_READ));
+    panic();
+  }
+
+  if (panicSwitchPressed) {
+    Serial.println("Emergency stop");
+    panic();
+  }
   
   if (millis() - lastSerialUpdate >= SERIAL_UPDATE_INTERVAL) {
     lastSerialUpdate = millis();
     Serial.println("(" + String(motionHandler.getCurrentPosition()[0]) + ", " + String(motionHandler.getCurrentPosition()[1]) + ")");
+    Serial.println(analogRead(UlTRASONIC_READ));
   }
 
   if (scheduler.isEmpty()) {

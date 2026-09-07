@@ -4,7 +4,7 @@
 
 // Having id not be part of context means that the context does not need to be unpacked to access the id. 
 // The id will be accessed a lot so this is good for both speed and readability.
-typedef bool (*ListenerFunction)();
+typedef bool (*ListenerFunction)(); // pointer to a function which returns a boolean
 
 struct Listener {
   int id;
