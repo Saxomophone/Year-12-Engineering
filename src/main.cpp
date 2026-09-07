@@ -1,43 +1,13 @@
 #include <Arduino.h>
 #include "eventScheduler.hpp"
 #include "listeners/listener.hpp"
-#include "events/stepperEvents.hpp"
 #include "pin.hpp"
-#include "events/motionEvents.hpp"
 #include "gcodeScheduler.hpp"
 #include "main.hpp"
-#include "listeners/limits.hpp"
-#include "events/servoEvents.hpp"
-
-// #define THERMISTOR A0
-// #define ELECTROMAGNET A4
-// #define GREEN_LED A3
-// #define SERVO 11
-// #define TOOLHEAD_SWITCH A5
-// #define TRIGGER_PIN A1
-// #define ECHO_PIN A2
-// #define ULTRASONIC_TIMEOUT 1000
-// signal travels 0.33mm/us, so this gives max distance of 330mm when multiplied by 2 cause return trip which is about right and is a nice round number :3
-
-
-#define STEPPER_Y_DIR 2
-#define STEPPER_Y_STEP 3
-#define STEPPER_X_DIR 4
-#define STEPPER_X_STEP 5
-#define STEPPER_SLEEP 6
 
 #define SERIAL_UPDATE_INTERVAL 500 //ms
-
-#define PANIC_LED_PIN 9
-#define THERMISTOR A0
-#define PANIC_SWITCH 10
-#define UlTRASONIC_READ 12
-#define SERVO_PIN 11
-
-
-// physical limits of the area in mm
-int X_LIMIT = 200;
-int Y_LIMIT = 200;
+#define ULTRASONIC_TRIGGER 3
+#define ULTRASONIC_ECHO 4
 
 
 // bool ultrasonicReadings[50]; // array to hold recent ultrasonic readings for smoothing
@@ -53,13 +23,8 @@ int loopCounter = 0;
 
 void panic();
 bool off(void*);
-bool toolhead_in_place();
 bool handleDelay(void* context);
 bool resetDelay(void* context);
-bool driver_overheated();
-bool area_obstructed();
-bool x_limit_button();
-bool y_limit_button();
 
 // Define a type for a function taking no args and returning void
 typedef bool (*EventHandler)(void *context);
@@ -73,19 +38,9 @@ struct DelayState {
 DelayState delayState1{0, 0};
 
 EventScheduler scheduler;
-bool stepperOverheated = false;
 bool areaObstructed = false;
-bool panicSwitchPressed = false;
-
-
-StepperState stepperY{STEPPER_Y_STEP, STEPPER_SLEEP, STEPPER_Y_DIR, 0, 2, STEPS, 0, 0, nullptr};
-StepperState stepperX{STEPPER_X_STEP, STEPPER_SLEEP, STEPPER_X_DIR, 0, 2, STEPS, 0, 0, nullptr};
-
-MotionHandler2D motionHandler{&stepperY, &stepperX};
 
 GcodeSchedulePackage* gcodeInstructionPackage;
-
-Servo toolheadLockServo;
 
 
 void setup() {
@@ -108,217 +63,27 @@ void setup() {
   // nextInstruction(); 
 
   scheduler.initListeners();
-  initLimits(&scheduler);
-  toolheadLockServo.setup(SERVO_PIN);
-
-  // init Gcode Processor
-  gcodeInstructionPackage->motionHandler = &motionHandler;
-  gcodeInstructionPackage->scheduler = &scheduler;
 
   //init pins
-  pinMode(PANIC_LED_PIN, OUTPUT);
-  pinMode(PANIC_SWITCH, INPUT_PULLUP);
-  pinMode(UlTRASONIC_READ, INPUT_PULLUP); //connected to other microcontroller which will ground when senses ultrasonic blocked
+  pinMode(ULTRASONIC_TRIGGER, OUTPUT);
+  pinMode(ULTRASONIC_ECHO, OUTPUT);
 
-
-  // add listeners
-  // Listener toolheadAttachedListener;
-  // scheduler.addListener(&toolheadAttached, toolhead_in_place, &toolheadAttachedListener);
-
-  scheduler.addListener(&stepperOverheated, driver_overheated);
-  scheduler.addListener(&panicSwitchPressed, *[]()->bool{return !digitalRead(PANIC_SWITCH);});
-  scheduler.addListener(&areaObstructed, *[]()->bool{return !digitalRead(UlTRASONIC_READ);});
+  scheduler.push([](void* context){
+    return false; // loops forever as it never returns true to tell eventScheduler it's finished
+  }, nullptr);
 
   // Listener areaObstructionListener;
   // scheduler.addListener(&areaObstructed, area_obstructed, &areaObstructionListener);
-
-  motionHandler.sleepMotion();
-
-  // scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-  //   DelayState* state = (DelayState*)context;
-  //   state->duration = 1000;
-  //   return true;
-  // }, &delayState1);
-  // scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
-
-  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-    int* angle = (int*)context;
-    toolheadLockServo.setAngle(*angle);
-    return true;
-  }, new int(180)); // set servo to open position
-
-  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-    DelayState* state = (DelayState*)context;
-    state->startTime = millis();
-    state->duration = 1000;
-    return true;
-  }, &delayState1);
-
-  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
-
-  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-    int* angle = (int*)context;
-    toolheadLockServo.setAngle(*angle);
-    return true;
-  }, new int(0)); // set servo to open position
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->wakeMotion();
-  }, &motionHandler); 
-
-  // scheduler.push([](void* context) {
-  //   StepperState* stepper = (StepperState*)context;
-  //   stepper->setupStepperEvent(new StepperState{STEPPER_X_STEP, STEPPER_SLEEP, STEPPER_X_DIR, 0, 2, STEPS, 200, 0, nullptr});
-  //   return true;
-  // }, &stepperX);
-
-  // scheduler.push([](void* context) {
-  //   StepperState* stepper = (StepperState*)context;
-  //   return stepper->handleStepper();
-  // }, &stepperX);
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupHoming();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->homeToolhead();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{101.882, 99.432, false});
-  }, &motionHandler); 
-
-  // scheduler.push([](void* context) {
-  //   Serial.println("moving to (100, 100)");
-  //   return true;
-  // }, nullptr);
-
-  scheduler.push([](void* context) { //TODO: make updateDelay later to make this easier :sparkles:
-    DelayState* state = (DelayState*)context;
-    state->duration = 1000;
-    return true;
-  }, &delayState1);
-  scheduler.push(handleDelay, &delayState1); // delay for 1 second with updated duration
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
- 
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{48.876, 55.192, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{100.505, 204.067, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{179.67, 169.648, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{101.882, 99.432, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{0, 0, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->setupMotionEvent(new MotionParameters{80, 0, true});
-  }, &motionHandler); 
-
-  scheduler.push([](void* context) {
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->handleMotion();
-  }, &motionHandler);
-
-  scheduler.push([](void* context) {  // push takes a function (which needs to be unpacked from the void pointer) and an object on which to run the function
-    MotionHandler2D* motionHandler = (MotionHandler2D*)context;
-    return motionHandler->sleepMotion();
-  }, &motionHandler); 
-
-  scheduler.push(off, nullptr);
 }
 
 
 void loop() {
-  // analogWrite(SERVO, 90);
-  // delay(500);
-  // analogWrite(SERVO, 210);
-  // delay(500);
-
-  // if (numInstructions > 0 && scheduler.numFreeEvents() >= 5) {
-  //   GcodeInstruction newInstruction = preProcessInstruction();
-  //   gcodeInstructionPackage->instruction = newInstruction;
-  //   scheduleInstruction(gcodeInstructionPackage);
-  //   numInstructions--;
-  // }
-
-
   scheduler.processNext(); // Call this repeatedly in the loop to process events
-  // Serial.println("StepperOverheated: " + String(stepperOverheated ? "True" : "False"));
-  // Serial.println("Stepper Heat: " + String(analogRead(THERMISTOR)));
-  // Serial.println("ToolheadAttached: " + String(toolheadAttached ? "True" : "False"));
 
-
-  if (stepperOverheated) {
-    Serial.println("Stepper overheated! Current thermistor reading: " + String(analogRead(THERMISTOR)));
-    panic();
-  }
-  
-  if (areaObstructed) {
-    Serial.println("Area obstructed!");
-    Serial.println(digitalRead(UlTRASONIC_READ));
-    panic();
-  }
-
-  if (panicSwitchPressed) {
-    Serial.println("Emergency stop");
-    panic();
-  }
   
   if (millis() - lastSerialUpdate >= SERIAL_UPDATE_INTERVAL) {
     lastSerialUpdate = millis();
-    Serial.println("(" + String(motionHandler.getCurrentPosition()[0]) + ", " + String(motionHandler.getCurrentPosition()[1]) + ")");
-    Serial.println(analogRead(UlTRASONIC_READ));
+    // insert debug statments here
   }
 
   if (scheduler.isEmpty()) {
@@ -328,30 +93,6 @@ void loop() {
   };
 
   loopCounter++;
-}
-
-void panic() {
-  Serial.println("panic");
-  motionHandler.sleepMotion();
-  // sleepStepper(&stepperYState);  
-  while (true) {
-      digitalWrite(PANIC_LED_PIN, HIGH);
-      delay(500);
-      digitalWrite(PANIC_LED_PIN, LOW);
-      delay(500);
-  } // halts program
-}
-
-bool off(void* context) {
-  // digitalWrite(ELECTROMAGNET, LOW);
-  // digitalWrite(GREEN_LED, LOW);
-  stepperY.sleepStepper();
-  return true;
-}
-
-bool driver_overheated() {
-  int thermistor_read = analogRead(THERMISTOR);
-  return thermistor_read > 590;
 }
 
 // bool area_obstructed() {
@@ -420,64 +161,6 @@ bool resetDelay(void* context) {
   state->startTime = millis();
   return true; // This handler just resets the timer and is done immediately
 }
-
-
-// void get_toolhead(EventScheduler scheduler) {
-//   /*  Move toolhead away from y stepper
-//       until switch is triggered
-//       then turn on electromagnet to grab toolhead
-//       then move toolhead towards y stepper
-//       then activate tool using servo
-//   */
-
-//   scheduler.push([]() { analogWrite(SERVO, 210); return true; }); // ensures servo is in open position
-
-//   scheduler.push([] () {wake_stepper; return true; });
-
-//   scheduler.push([]() {digitalWrite(STEPPER_Y_DIR, LOW); return true; });
-
-//   schedule_millis_reset(scheduler);
-
-//   scheduler.push(
-//     []() {
-//       unsigned long current_millis = millis();
-//       if (current_millis - prev_millis >= 2) {
-//         prev_millis = current_millis;
-//         stepper_y_state = (stepper_y_state == STEP_LOW) ? STEP_HIGH : STEP_LOW; // toggle step state
-//         digitalWrite(STEPPER_Y_STEP, stepper_y_state); // toggle step pin
-//       }
-//       return toolhead_in_place();
-//     }
-//   );
-
-//   scheduler.push([]() {digitalWrite(ELECTROMAGNET, HIGH); return true; });
-
-//   schedule_millis_reset(scheduler);
-
-//   scheduler.push(
-//     []() {
-//       unsigned long current_millis = millis();
-//       if (current_millis - prev_millis >= 500) {
-//         return true; // wait 500ms for electromagnet to fully engage
-//       } else {
-//         return false;
-//       }
-//     }
-//   );
-
-  
-//   analogWrite(SERVO, 90);
-//   delay(1000);
-
-//   digitalWrite(STEPPER_Y_DIR, HIGH);
-
-//   for (int i = 0; i < steps_per_rev*5; i++) {
-//     digitalWrite(STEPPER_Y_STEP, LOW);
-//     delay(2);
-//     digitalWrite(STEPPER_Y_STEP, HIGH);
-//     delay(2);
-//   }
-//}
 
 float decimalRound(float input, int decimals) {
   float scale=pow(10,decimals);
