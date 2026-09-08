@@ -9,8 +9,8 @@
 #define SERIAL_UPDATE_INTERVAL 500 //ms
 
 #define PANIC_OUTPUT_PIN 5
-#define TRIGGER_PIN 3
-#define ECHO_PIN 4
+#define TRIGGER_PIN 9
+#define ECHO_PIN 10
 #define ULTRASONIC_TIMEOUT 30000 // microseconds
 #define ULTRASONIC_SUCCESS_PROPORTION 0.96 // 48/50 as a default  
 
@@ -48,6 +48,9 @@ void setup() {
   initUltrasonic(TRIGGER_PIN, ECHO_PIN, ULTRASONIC_TIMEOUT, ULTRASONIC_SUCCESS_PROPORTION);
 
   scheduler.addListener(&areaObstructed, check_area_obstructed);
+
+  pinMode(PANIC_OUTPUT_PIN, OUTPUT);
+  digitalWrite(PANIC_OUTPUT_PIN, LOW); // Ensure the panic output is low at startup
 
 
 

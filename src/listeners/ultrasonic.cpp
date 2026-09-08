@@ -1,12 +1,14 @@
 #include "listeners/ultrasonic.hpp"
 #include "eventScheduler.hpp"
 
+#define NUM_ULTRASONIC_READINGS 200
+
 int triggerPin;
 int echoPin;
 int ultrasonicTimeout;
-float filterSuccessProportion = 0.96; // 48/50 as a default
+float filterSuccessProportion = 0.98; // proportion of readings that need to be obstructed to return obstructed
 unsigned long prevUltrasonic_ms = 0;
-bool ultrasonicReadings[50]; // array to hold recent ultrasonic readings for smoothing
+bool ultrasonicReadings[NUM_ULTRASONIC_READINGS]; // array to hold recent ultrasonic readings for smoothing
 
 
 void initUltrasonic(int trigger, int echo, int timeout, float successProportion) {
@@ -27,19 +29,21 @@ bool check_area_obstructed() {
   }
   // Serial.println("Checking area obstruction with ultrasonic sensor...");
 
-  for (int i = 0; i <= 50; i++) {
+  for (int i = 0; i <= NUM_ULTRASONIC_READINGS; i++) {
       
-    if (i == 50) {
+    if (i == NUM_ULTRASONIC_READINGS) {
       // Serial.println("checking time");
       int trueCount = 0;
-      for (int j = 0; j < 50; j++) {
+      for (int j = 0; j < NUM_ULTRASONIC_READINGS; j++) {
         if (ultrasonicReadings[j]) { // if any reading detects an object, consider the area obstructed
           trueCount++;
         }
       }
-      if (trueCount > int((50*filterSuccessProportion))) {
-        Serial.println("Area obstructed! Ultrasonic readings: " + String(trueCount));
+      Serial.print("trueCount: ");
+      Serial.println(String(trueCount));
+      if (trueCount >= int((NUM_ULTRASONIC_READINGS*filterSuccessProportion))) {
         prevUltrasonic_ms = millis();
+        Serial.println("trueCount > threshold");
         return true;
       } else {
         // Serial.println("Area clear. Ultrasonic readings: " + String(trueCount));
